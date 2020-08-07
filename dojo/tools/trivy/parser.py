@@ -1,8 +1,10 @@
+  
 """
 Parser for Aquasecurity trivy (https://github.com/aquasecurity/trivy) Docker images scaner
 """
 
 import json
+import hashlib
 import logging
 
 from dojo.models import Finding
@@ -21,7 +23,6 @@ TRIVY_SEVERITIES = {
 DESCRIPTION_TEMPLATE = """{title}
 Target: {target}
 Fixed version: {fixed_version}
-
 {description_text}
 """
 
@@ -29,6 +30,7 @@ Fixed version: {fixed_version}
 class TrivyParser:
 
     def __init__(self, scan_file, test):
+        self.dupes = dict()
         self.items = []
 
         scan_data = scan_file.read()
@@ -64,14 +66,15 @@ class TrivyParser:
                     package_name,
                     package_version,
                 ])
-                description = DESCRIPTION_TEMPLATE.format(
-                    title=vuln.get('Title', ''),
-                    target=target,
-                    fixed_version=mitigation,
-                    description_text=vuln.get('Description', ''),
-                )
-                self.items.append(
-                    Finding(
+                dupe_key = hashlib.md5(title.encode("utf-8")).hexdigest()
+                if dupe_key not in self.dupes:
+                    description = DESCRIPTION_TEMPLATE.format(
+                        title=vuln.get('Title', ''),
+                        target=target,
+                        fixed_version=mitigation,
+                        description_text=vuln.get('Description', ''),
+                    )
+                    self.dupes[dupe_key] = Finding(
                         test=test,
                         title=title,
                         cve=vuln_id,
@@ -80,4 +83,4 @@ class TrivyParser:
                         description=description,
                         mitigation=mitigation,
                     )
-                )
+        self.items = list(self.dupes.values())
